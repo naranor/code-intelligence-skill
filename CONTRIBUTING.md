@@ -6,7 +6,7 @@ Thank you for your interest in improving the Code Intelligence Skill! This docum
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/code-intelligence-skill.git
+   git clone https://github.com/naranor/code-intelligence-skill.git
    cd code-intelligence-skill
    ```
 

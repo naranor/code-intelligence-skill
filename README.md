@@ -1,6 +1,6 @@
 # Code Intelligence Skill for Gemini CLI
 
-[![CI](https://github.com/your-username/code-intelligence-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/code-intelligence-skill/actions/workflows/ci.yml)
+[![CI](https://github.com/naranor/code-intelligence-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/naranor/code-intelligence-skill/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Universal, safe, and professional code modification and refactoring environment for AI agents. This skill enables AI agents to perform complex code manipulations with AST-level safety and project-wide type-aware refactoring.
