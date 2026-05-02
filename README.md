@@ -5,6 +5,12 @@
 
 Universal, safe, and professional code modification and refactoring environment for AI agents. This skill enables AI agents to perform complex code manipulations with AST-level safety and project-wide type-aware refactoring.
 
+### The Problem It Solves
+
+AI agents frequently make mistakes when editing code, often breaking the file's syntax with unmatched brackets, missing colons, or indentation errors. These failures trigger a costly and frustrating cycle: the agent attempts to fix the error, often unsuccessfully; it might even resort to overwriting the entire file, which can lead to the loss of important comments or the oversimplification of complex logic. These issues are sometimes only caught much later during testing or at runtime, leading to a massive waste of tokens and session steps as the agent struggles to recover.
+
+**`safe_edit` solves this problem at the source.** By performing mandatory AST (Abstract Syntax Tree) verification *before* any changes are committed to disk, it ensures that the file is never left in a broken state. If an edit would violate the language's syntax, the tool returns a clear error, and the original file remains untouched. This guarantees structural integrity, prevents code loss, and significantly reduces token consumption by stopping the "syntax-fix-break" loop before it starts.
+
 ## Features
 
 - **Multi-language Safe Editing**: Built-in syntax verification for Python, Java, Go, C++, Rust, and more.

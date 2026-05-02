@@ -2,6 +2,14 @@
 
 This skill provides a unified, safe, and professional environment for code modification and refactoring across 50+ languages using **AST verification** and **LSP (Language Server Protocol)**.
 
+### 🛡️ Why use safe_edit? (Core Mandate)
+Standard file edits often lead to syntax breakage, causing you (the agent) to enter a "fix-it" loop that wastes tokens and can lead to permanent code loss or oversimplification if you decide to overwrite the entire file.
+
+`safe_edit.py` prevents this by:
+1. **Validating changes against the AST** before saving.
+2. **Aborting the save** if the syntax is broken.
+3. **Preserving your context** by preventing unnecessary debugging steps.
+
 ## 1. Environment Diagnostics
 
 Before starting intensive work, verify your environment to see which languages and tools are supported.
