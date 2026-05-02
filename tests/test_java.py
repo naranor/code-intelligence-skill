@@ -3,7 +3,7 @@ import pytest
 import time
 from pathlib import Path
 
-SAFE_EDIT = ".gemini/skills/code-intelligence/safe_edit.py"
+SAFE_EDIT = "safe_edit.py"
 
 def test_java_maven_structure_rename(tmp_path):
     # Setup Maven-like project

@@ -7,28 +7,115 @@ import json
 import time
 import threading
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict, Any
+from dataclasses import dataclass
+from typing import Optional, Tuple, List, Dict, Any, Type
 
-# Internal language database
-LANG_DATA = {
-    "python": {"id": "python", "lsp": None},
-    "java":   {"id": "java",   "lsp": "jdtls"},
-    "go":     {"id": "go",     "lsp": "gopls"},
-    "rust":   {"id": "rust",   "lsp": "rust-analyzer"},
-}
+# --- Core Data Structures ---
 
-ALIASES = {
-    "py": "python", "python": "python", ".py": "python",
-    "java": "java", ".java": "java",
-    "go": "go", "golang": "go", ".go": "go",
-    "rs": "rust", "rust": "rust", ".rs": "rust"
-}
+@dataclass
+class Position:
+    line: int
+    character: int
+
+@dataclass
+class Range:
+    start: Position
+    end: Position
+
+@dataclass
+class TextEdit:
+    range: Range
+    new_text: str
+
+# --- Language Engines (Extensibility) ---
+
+class BaseEngine:
+    """Base class for language-specific logic."""
+    def verify_syntax(self, code: str) -> bool:
+        return True  # Default to permissive
+
+    def get_lsp_command(self) -> Optional[List[str]]:
+        return None
+
+    def perform_rename(self, file_path: Path, symbol: str, new_name: str, root_path: Path) -> str:
+        return "Rename not supported for this language."
+
+class PythonEngine(BaseEngine):
+    def verify_syntax(self, code: str) -> bool:
+        try:
+            ast.parse(code)
+            return True
+        except SyntaxError as e:
+            print(f"❌ Python Syntax Error: {e}")
+            return False
+
+    def perform_rename(self, file_path: Path, symbol: str, new_name: str, root_path: Path) -> str:
+        try:
+            from rope.base.project import Project
+            from rope.refactor.rename import Rename
+            project = Project(str(root_path))
+            res = project.get_resource(str(file_path.relative_to(root_path)))
+            offset = res.read().find(symbol)
+            if offset == -1: return "Error: Symbol not found in file."
+            project.do(Rename(project, res, offset).get_changes(new_name))
+            project.close()
+            return f"Renamed '{symbol}' to '{new_name}' (Python/Rope)."
+        except ImportError:
+            return "Error: 'rope' library not installed for Python refactoring."
+        except Exception as e:
+            return f"Python rename failed: {e}"
+
+class TreeSitterEngine(BaseEngine):
+    def __init__(self, lang_id: str, lsp_bin: Optional[str] = None):
+        self.lang_id = lang_id
+        self.lsp_bin = lsp_bin
+
+    def verify_syntax(self, code: str) -> bool:
+        try:
+            from tree_sitter import Language, Parser
+            mod_name = f"tree_sitter_{self.lang_id}"
+            mod = __import__(mod_name)
+            parser = Parser()
+            parser.set_language(Language(mod.language(), self.lang_id))
+            tree = parser.parse(bytes(code, "utf8"))
+            return not tree.root_node.has_error
+        except ImportError:
+            # If tree-sitter or grammar is missing, we fallback to True but warn
+            # print(f"⚠️ tree-sitter-{self.lang_id} not found, skipping AST check.")
+            return True
+        except Exception as e:
+            print(f"⚠️ Tree-sitter error: {e}")
+            return True
+
+    def get_lsp_command(self) -> Optional[List[str]]:
+        if not self.lsp_bin: return None
+        # Look in PATH and common local paths
+        possible = [self.lsp_bin, os.path.expanduser(f"~/go/bin/{self.lsp_bin}"), os.path.expanduser(f"~/.local/bin/{self.lsp_bin}")]
+        for p in possible:
+            try:
+                if subprocess.run(["which", p], capture_output=True).returncode == 0: return [p]
+                if os.path.isfile(p) and os.access(p, os.X_OK): return [p]
+            except: continue
+        return None
+
+class GoEngine(TreeSitterEngine):
+    def perform_rename(self, file_path: Path, symbol: str, new_name: str, root_path: Path) -> str:
+        # Go has a very reliable CLI tool for rename via gopls
+        lsp_cmd = self.get_lsp_command()
+        if not lsp_cmd: return "Error: gopls not found."
+        
+        content = file_path.read_text()
+        lines = content.splitlines()
+        pos = next(((i, line.find(symbol)) for i, line in enumerate(lines) if line.find(symbol) != -1), None)
+        if not pos: return "Error: Symbol not found."
+        
+        # gopls rename -w file.go:line:col newname
+        res = subprocess.run([lsp_cmd[0], "rename", "-w", f"{file_path}:{pos[0]+1}:{pos[1]+1}", new_name], capture_output=True, text=True)
+        return "Rename successful (Go/gopls)." if res.returncode == 0 else f"Gopls Error: {res.stderr}"
+
+# --- LSP Client ---
 
 class MinimalLspClient:
-    """
-    Standalone JSON-RPC client for Language Servers.
-    Features a background thread to prevent pipe deadlocks during heavy indexing.
-    """
     def __init__(self, command: List[str], root_path: Path, lang_id: str):
         self.command = command
         self.root_path = root_path
@@ -40,16 +127,10 @@ class MinimalLspClient:
 
     def start(self):
         if self.process and self.process.poll() is None: return
-        
-        print(f"[LSP] Starting '{self.command[0]}' for {self.lang_id}...")
         self.process = subprocess.Popen(
-            self.command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            bufsize=0
+            self.command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, bufsize=0
         )
-
         def reader():
             while self.process and self.process.poll() is None:
                 try:
@@ -60,7 +141,6 @@ class MinimalLspClient:
                         data = self.process.stdout.read(length).decode("utf-8")
                         self._responses.append(json.loads(data))
                 except: break
-        
         self._reader_thread = threading.Thread(target=reader, daemon=True)
         self._reader_thread.start()
 
@@ -103,92 +183,91 @@ class MinimalLspClient:
                 return res.get("result")
         return None
 
+# --- Main Editor ---
+
 class UltimateSafeEditor:
     def __init__(self):
+        self.engines: Dict[str, BaseEngine] = {
+            ".py": PythonEngine(),
+            ".go": GoEngine("go", "gopls"),
+            ".java": TreeSitterEngine("java", "jdtls"),
+            ".rs": TreeSitterEngine("rust", "rust-analyzer"),
+            ".cpp": TreeSitterEngine("cpp", "clangd"),
+            ".c": TreeSitterEngine("c", "clangd"),
+        }
         self._lsp_clients: Dict[str, MinimalLspClient] = {}
 
-    def _get_lsp_client(self, lang_id: str, root_path: Path) -> Optional[MinimalLspClient]:
-        if lang_id not in self._lsp_clients:
-            info = LANG_DATA.get(lang_id)
-            if not info or not info["lsp"]: return None
-            
-            lsp_bin = info["lsp"]
-            possible = [lsp_bin, os.path.expanduser(f"~/go/bin/{lsp_bin}"), os.path.expanduser(f"~/.local/bin/{lsp_bin}")]
-            found = None
-            for p in possible:
-                try:
-                    if os.path.isfile(p) and os.access(p, os.X_OK):
-                        found = p
-                        break
-                except: continue
-            if not found: return None
-            self._lsp_clients[lang_id] = MinimalLspClient([found], root_path, lang_id)
-            
-        return self._lsp_clients[lang_id]
-
-    def verify_syntax(self, code: str, file_path: str) -> bool:
-        ext = Path(file_path).suffix.lower()
-        if ext == ".py":
-            try: ast.parse(code); return True
-            except SyntaxError as e: print(f"❌ Python Error: {e}"); return False
-        try:
-            from tree_sitter import Language, Parser
-            lang_id = ALIASES.get(ext)
-            mod = __import__(f"tree_sitter_{lang_id}")
-            parser = Parser(Language(mod.language()))
-            return not parser.parse(bytes(code, "utf8")).root_node.has_error
-        except: return True
+    def get_engine(self, ext: str) -> BaseEngine:
+        return self.engines.get(ext.lower(), BaseEngine())
 
     def smart_replace(self, file_path: str, old: str, new: str) -> str:
         fp = Path(file_path).resolve()
+        if not fp.exists(): return f"Error: File {file_path} not found."
         content = fp.read_text(encoding="utf-8")
         if content.count(old) != 1: return f"Error: Match not unique ({content.count(old)} found)."
+        
         new_content = content.replace(old, new)
-        if not self.verify_syntax(new_content, file_path): return "Aborting: Syntax error."
+        engine = self.get_engine(fp.suffix)
+        if not engine.verify_syntax(new_content): return "Aborting: Syntax error detected."
+        
         fp.write_text(new_content, encoding="utf-8")
         return f"Successfully updated {file_path}."
 
     def rename_symbol(self, file_path: str, symbol: str, new_name: str, root_path: str = ".") -> str:
-        abs_file = Path(file_path).resolve()
-        abs_root = Path(root_path).resolve()
-        lang_id = ALIASES.get(abs_file.suffix.lower())
+        fp = Path(file_path).resolve()
+        rp = Path(root_path).resolve()
+        engine = self.get_engine(fp.suffix)
         
-        if lang_id == "python":
-            try:
-                from rope.base.project import Project
-                from rope.refactor.rename import Rename
-                project = Project(str(abs_root))
-                res = project.get_resource(str(abs_file.relative_to(abs_root)))
-                project.do(Rename(project, res, res.read().find(symbol)).get_changes(new_name))
-                project.close(); return f"Renamed '{symbol}' to '{new_name}' (Python/Rope)."
-            except Exception as e: return f"Rename failed: {e}"
+        # Try engine-specific rename first (like Rope or Go CLI)
+        res = engine.perform_rename(fp, symbol, new_name, rp)
+        if "Error" not in res and "not supported" not in res: return res
 
-        client = self._get_lsp_client(lang_id, abs_root)
-        if not client: return f"Error: LSP not found for {lang_id}."
+        # Fallback to Generic LSP Client
+        lsp_cmd = engine.get_lsp_command()
+        if not lsp_cmd: return res # Return the engine error
 
-        content = abs_file.read_text()
+        client = self._lsp_clients.get(fp.suffix)
+        if not client:
+            client = MinimalLspClient(lsp_cmd, rp, fp.suffix[1:])
+            self._lsp_clients[fp.suffix] = client
+        
+        content = fp.read_text()
         lines = content.splitlines()
         pos = next(((i, line.find(symbol)) for i, line in enumerate(lines) if line.find(symbol) != -1), None)
-        if not pos: return "Error: Symbol not found."
-        
-        if lang_id == "go":
-            res = subprocess.run([client.command[0], "rename", "-w", f"{abs_file}:{pos[0]+1}:{pos[1]+1}", new_name], capture_output=True, text=True)
-            return "Rename successful." if res.returncode == 0 else f"Gopls Error: {res.stderr}"
+        if not pos: return "Error: Symbol not found in file."
 
-        edit = client.rename(abs_file, pos[0], pos[1], new_name)
+        edit = client.rename(fp, pos[0], pos[1], new_name)
         if not edit: return "LSP Error: No edits received."
         
-        for uri, file_edits in edit.get("changes", {}).items():
+        # Apply edits
+        changes = edit.get("changes", {})
+        for uri, file_edits in changes.items():
             p = Path(uri.replace("file://", ""))
             f_lines = p.read_text().splitlines()
+            # Sort edits in reverse order to keep indices valid
             for e in sorted(file_edits, key=lambda x: x["range"]["start"]["line"], reverse=True):
                 r = e["range"]; l = r["start"]["line"]
                 f_lines[l] = f_lines[l][:r["start"]["character"]] + e["newText"] + f_lines[l][r["end"]["character"]:]
             p.write_text("\n".join(f_lines))
         return "Rename applied via LSP."
 
+    def check_env(self):
+        print("--- Code Intelligence Environment Check ---")
+        # Python
+        try: import rope; print("✅ Python: 'rope' installed.")
+        except: print("❌ Python: 'rope' missing (refactoring disabled).")
+        # Tree-sitter
+        try: import tree_sitter; print("✅ Tree-sitter: Core library installed.")
+        except: print("❌ Tree-sitter: Core library missing (AST checks disabled).")
+        # Engines
+        for ext, engine in self.engines.items():
+            if isinstance(engine, TreeSitterEngine):
+                lsp = engine.get_lsp_command()
+                status = f"✅ LSP: {lsp[0]}" if lsp else "❌ LSP: missing"
+                print(f"Language {ext}: {status}")
+
 def main():
-    parser = argparse.ArgumentParser(description="Ultimate Safe Edit Tool")
+    parser = argparse.ArgumentParser(description="Ultimate Safe Edit Tool (Modular Edition)")
     subparsers = parser.add_subparsers(dest="command")
     
     r_parser = subparsers.add_parser("replace")
@@ -197,29 +276,30 @@ def main():
     rn_parser = subparsers.add_parser("rename")
     rn_parser.add_argument("file"); rn_parser.add_argument("symbol"); rn_parser.add_argument("new_name"); rn_parser.add_argument("--root", default=".")
     
-    l_parser = subparsers.add_parser("lint")
-    l_parser.add_argument("file")
+    subparsers.add_parser("check-env")
 
     lsp_parser = subparsers.add_parser("lsp-start", help="Warm up LSP server for a language")
-    lsp_parser.add_argument("lang", help="Language name (e.g. java, go, rust)")
-    lsp_parser.add_argument("--root", default=".", help="Project root")
+    lsp_parser.add_argument("lang"); lsp_parser.add_argument("--root", default=".")
 
     args = parser.parse_args()
     editor = UltimateSafeEditor()
+    
     try:
         if args.command == "replace": print(editor.smart_replace(args.file, args.old, args.new))
         elif args.command == "rename": print(editor.rename_symbol(args.file, args.symbol, args.new_name, args.root))
-        elif args.command == "lint": print(editor.fix_lint(args.file))
+        elif args.command == "check-env": editor.check_env()
         elif args.command == "lsp-start":
-            lang_id = ALIASES.get(args.lang.lower())
-            if not lang_id: print(f"❌ Language '{args.lang}' not supported."); return
-            client = editor._get_lsp_client(lang_id, Path(args.root).resolve())
-            if client: 
+            ext = f".{args.lang}"
+            engine = editor.get_engine(ext)
+            cmd = engine.get_lsp_command()
+            if cmd:
+                client = MinimalLspClient(cmd, Path(args.root).resolve(), args.lang)
                 client.initialize()
-                print(f"✅ LSP for {lang_id} is warming up in background.")
-            else: print(f"❌ LSP binary for {lang_id} not found.")
+                print(f"✅ LSP for {args.lang} is warming up.")
+            else: print(f"❌ LSP for {args.lang} not found.")
         else: parser.print_help()
-    except Exception as e: print(f"FATAL: {e}")
+    except Exception as e:
+        print(f"FATAL: {e}")
 
 if __name__ == "__main__":
     main()

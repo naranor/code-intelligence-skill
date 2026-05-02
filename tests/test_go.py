@@ -3,7 +3,7 @@ import pytest
 import time
 from pathlib import Path
 
-SAFE_EDIT = ".gemini/skills/code-intelligence/safe_edit.py"
+SAFE_EDIT = "safe_edit.py"
 
 def test_go_replace_sunny(tmp_path):
     f = tmp_path / "main.go"
