@@ -21,6 +21,9 @@ jobs:
       - name: Build Skill Artifact
         run: python3 build_skill.py
 
+      - name: Verify Artifact Integrity
+        run: python3 build_skill.py verify
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')

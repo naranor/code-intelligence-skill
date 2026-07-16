@@ -1,9 +1,11 @@
-# Code Intelligence Skill for Gemini CLI
+# Code Intelligence Skill for Gemini CLI and Claude Code
 
 [![CI](https://github.com/naranor/code-intelligence-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/naranor/code-intelligence-skill/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Universal, safe, and professional code modification and refactoring environment for AI agents. This skill enables AI agents to perform complex code manipulations with AST-level safety and project-wide type-aware refactoring.
+
+Supports **Gemini CLI** and **Claude Code** out of the box, following the shared [agentskills.io](https://agentskills.io) standard.
 
 ### The Problem It Solves
 
@@ -22,43 +24,187 @@ AI agents frequently make mistakes when editing code, often breaking the file's 
 
 - `safe_edit.py`: The core engine for replacements and refactoring.
 - `distiller.py`: Command output compressor and filter.
+- `install_skill.py`: Installer for Gemini CLI and Claude Code.
 
 ## Installation
 
-There are several ways to install and use the Code Intelligence Skill, depending on your environment and needs.
+### Automated Installation (Recommended)
 
-### 1. Manual Installation (Portable Scripts)
-Best for custom agents or simple environments.
-- Copy `safe_edit.py` and `distiller.py` directly into your agent's skills folder (e.g., `.agents/skills/` or `.gemini/skills/`).
-- Ensure you have the dependencies installed: `pip install -r requirements.txt`.
+The `install_skill.py` script handles all file placement and directory creation automatically. It supports both CLIs, both user and workspace scopes, and can install from a local source checkout or a downloaded `.skill` archive.
 
-### 2. Using Pre-built Skill Package
-Best for Gemini CLI and compatible agents.
-- Download the latest `code-intelligence.skill` from the **GitHub Releases** page.
-- Load the downloaded file into your agent's configuration.
+#### Install into both CLIs at once
 
-### 3. Building from Source
-If you want to build the skill package yourself from the latest source code:
-
-**Option A: Using Makefile (Recommended)**
 ```bash
+# From a source checkout
+python3 install_skill.py
+
+# From a downloaded release archive
+python3 install_skill.py --source code-intelligence.skill
+```
+
+#### Install only for Gemini CLI
+
+```bash
+python3 install_skill.py --target gemini-cli
+```
+
+After installation, confirm the skill is loaded:
+```bash
+# In a Gemini CLI session
+/skills list
+```
+
+#### Install only for Claude Code
+
+```bash
+python3 install_skill.py --target claude-code
+```
+
+After installation, reload plugins in Claude Code:
+```
+/plugin reload
+```
+
+#### Install for the current workspace instead of your user account
+
+```bash
+python3 install_skill.py --scope workspace
+```
+
+#### Uninstall
+
+```bash
+python3 install_skill.py --target gemini-cli --uninstall
+python3 install_skill.py --target claude-code --uninstall
+```
+
+#### Via Makefile
+
+```bash
+make install-gemini    # Gemini CLI, user scope
+make install-claude    # Claude Code, user scope
+make install-all       # Both CLIs, user scope
+make uninstall-gemini  # Remove Gemini CLI installation
+make uninstall-claude  # Remove Claude Code installation
+```
+
+#### Via console command (after `pip install -e .`)
+
+```bash
+install-skill                        # Both CLIs, user scope
+install-skill --target gemini-cli    # Gemini CLI only
+install-skill --target claude-code   # Claude Code only
+```
+
+---
+
+### Install Locations
+
+| Target | Scope | Directory |
+|---|---|---|
+| Gemini CLI | user | `~/.gemini/skills/code-intelligence/` |
+| Gemini CLI | workspace | `.gemini/skills/code-intelligence/` |
+| Claude Code | user | `~/.claude/plugins/code-intelligence/` |
+| Claude Code | workspace | `.claude/plugins/code-intelligence/` |
+
+---
+
+### Manual Installation (Fallback)
+
+If you prefer to install manually or are using a custom agent:
+
+1. Copy `safe_edit.py`, `distiller.py`, and `SKILL.md` into your target skill directory.
+2. Install dependencies: `pip install -r requirements.txt`.
+3. Verify: `python3 safe_edit.py check-env`.
+
+For **Gemini CLI** the skill directory structure should be:
+```
+~/.gemini/skills/code-intelligence/
+├── SKILL.md
+├── safe_edit.py
+├── distiller.py
+└── requirements.txt
+```
+
+For **Claude Code** the plugin structure should be:
+```
+~/.claude/plugins/code-intelligence/
+├── .claude-plugin/
+│   └── plugin.json
+├── skills/
+│   └── code-intelligence/
+│       └── SKILL.md
+├── safe_edit.py
+├── distiller.py
+└── requirements.txt
+```
+
+---
+
+### Prerequisites
+
+- Python 3.10+ on `PATH` as `python3`
+- Install optional dependencies for extended language support:
+  ```bash
+  pip install -r requirements.txt
+  ```
+- Install optional LSP servers for type-aware rename:
+  - Go: `go install golang.org/x/tools/gopls@latest`
+  - Java: install `jdtls`
+  - Rust: install `rust-analyzer`
+  - C/C++: install `clangd`
+
+### Upgrade
+
+Re-run the installer to overwrite an existing installation:
+```bash
+python3 install_skill.py --target all
+```
+
+### Verification
+
+```bash
+python3 safe_edit.py check-env
+```
+
+---
+
+### Using Pre-built Skill Package
+
+Download the latest `code-intelligence.skill` from the **GitHub Releases** page and install from the archive:
+
+```bash
+python3 install_skill.py --source /path/to/code-intelligence.skill
+```
+
+### Building from Source
+
+```bash
+# Build the .skill archive
 make build
-```
-This creates `code-intelligence.skill` in the root directory.
-
-**Option B: Using Python Script**
-If `make` is not available on your system:
-```bash
-python3 build_skill.py
+# Verify the artifact
+make verify
 ```
 
-### 4. For Developers (System-wide CLI)
-If you want to use `safe-edit` and `distill` as global commands in your terminal:
+### For Developers (System-wide CLI)
+
 ```bash
 pip install -e .
-# Verification
 safe-edit check-env
+install-skill --help
 ```
+
+---
+
+## Migrating from a Previous Manual Install
+
+If you previously copied `safe_edit.py` / `distiller.py` directly into `.gemini/skills/` or a custom path, your existing setup will continue to work. To switch to the managed layout, run:
+
+```bash
+python3 install_skill.py --target gemini-cli
+```
+
+The installer will create the canonical `~/.gemini/skills/code-intelligence/` directory without affecting other skills.
 
 ## Usage
 

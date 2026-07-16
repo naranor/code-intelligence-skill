@@ -29,3 +29,12 @@ jobs:
     - name: Run Python tests
       run: |
         pytest tests/test_python.py
+
+    - name: Run installer tests
+      run: |
+        pytest tests/test_installer.py
+
+    - name: Verify build artifact integrity
+      run: |
+        python3 build_skill.py
+        python3 build_skill.py verify
