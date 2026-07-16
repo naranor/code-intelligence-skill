@@ -5,7 +5,7 @@
 
 Universal, safe, and professional code modification and refactoring environment for AI agents. This skill enables AI agents to perform complex code manipulations with AST-level safety and project-wide type-aware refactoring.
 
-Supports **Gemini CLI** and **Claude Code** out of the box, following the shared [agentskills.io](https://agentskills.io) standard.
+Supports **Gemini CLI** and **Claude Code** out of the box, following the shared agentskills.io open standard for agent skills (`SKILL.md` format).
 
 ### The Problem It Solves
 
