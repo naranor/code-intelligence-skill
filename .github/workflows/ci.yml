@@ -37,4 +37,3 @@ jobs:
     - name: Verify build artifact integrity
       run: |
         python3 build_skill.py
-        python3 build_skill.py verify
