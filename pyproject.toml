@@ -25,13 +25,14 @@ test = [
 [project.scripts]
 safe-edit = "safe_edit:main"
 distill = "distiller:main"
+install-skill = "install_skill:main"
 
 [tool.setuptools.package-dir]
 "" = "."
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["safe_edit*", "distiller*"]
+include = ["safe_edit*", "distiller*", "install_skill*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

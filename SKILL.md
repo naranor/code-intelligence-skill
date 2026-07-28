@@ -1,6 +1,30 @@
+---
+name: code-intelligence
+description: |
+  Universal, safe, and professional code modification and refactoring environment
+  for 50+ languages. Use when editing source files to prevent syntax breakage,
+  perform project-wide type-aware renames (LSP), or distill large command output
+  to save context window tokens.
+license: MIT — see LICENSE
+---
+
 # Code Intelligence Skill (Universal Edition)
 
 This skill provides a unified, safe, and professional environment for code modification and refactoring across 50+ languages using **AST verification** and **LSP (Language Server Protocol)**.
+
+## Runtime Requirements
+
+| Requirement | Gemini CLI | Claude Code | Notes |
+|---|---|---|---|
+| Python 3.10+ | ✅ | ✅ | Must be on `PATH` as `python3` |
+| `tree-sitter` | Optional | Optional | Enables AST checks for Go/Java/Rust/C++ |
+| `rope` | Optional | Optional | Enables Python project-wide rename |
+| `gopls` | Optional | Optional | Enables Go rename via LSP |
+| `jdtls` / `rust-analyzer` / `clangd` | Optional | Optional | Language-specific LSP rename |
+
+To verify your environment, run: `python3 safe_edit.py check-env`
+
+**Skill scripts** (`safe_edit.py`, `distiller.py`) must be accessible from the working directory or be on `PATH`. Install dependencies with: `pip install -r requirements.txt`
 
 ### 🛡️ Why use safe_edit? (Core Mandate)
 Standard file edits often lead to syntax breakage, causing you (the agent) to enter a "fix-it" loop that wastes tokens and can lead to permanent code loss or oversimplification if you decide to overwrite the entire file.
