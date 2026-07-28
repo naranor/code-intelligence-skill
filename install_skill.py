@@ -307,7 +307,13 @@ def main(argv: Optional[list] = None) -> None:
         print(f"   {cli}: {path}")
 
     print("\nNext steps:")
-    print("  1. Install Python dependencies:  pip install -r requirements.txt")
+    req_paths = [path / "requirements.txt" for _, path in installed if (path / "requirements.txt").exists()]
+    if req_paths:
+        print("  1. Install Python dependencies:")
+        for p in req_paths:
+            print(f"     pip install -r {p}")
+    else:
+        print("  1. Install Python dependencies:  pip install -r requirements.txt")
     print("  2. Verify the environment:        python3 safe_edit.py check-env")
     if any(cli == "Claude Code" for cli, _ in installed):
         print("  3. Claude Code: restart the CLI or run /plugin reload")
