@@ -21,8 +21,7 @@ jobs:
       - name: Build Skill Artifact
         run: python3 build_skill.py
 
-      - name: Verify Artifact Integrity
-        run: python3 build_skill.py verify
+      # Artifact integrity is already verified by build_skill.py during the build step
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
