@@ -91,6 +91,12 @@ def resolve_source(source: str) -> Path:
         tmp = Path(tempfile.mkdtemp(prefix="code-intelligence-install-"))
         print(f"  📦 Extracting {src.name} → {tmp}")
         with zipfile.ZipFile(src, "r") as zf:
+            root = tmp.resolve()
+            for member in zf.infolist():
+                name = member.filename.replace("\\", "/")
+                dest_path = (root / name).resolve()
+                if dest_path != root and root not in dest_path.parents:
+                    _die(f"Unsafe path in archive: {member.filename}")
             zf.extractall(tmp)
         return tmp
 
